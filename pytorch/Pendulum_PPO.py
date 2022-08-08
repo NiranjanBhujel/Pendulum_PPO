@@ -1,16 +1,14 @@
 import sys
-import tensorflow as tf
-from tensorflow import keras
+import torch
+from torch import nn
+import torch.nn.functional as F
 import numpy as np
 import gym
 from Policy import PPOPolicy
 from PPOBuffer import PPOBuffer
 import matplotlib.pyplot as plt
 from matplotlib import animation
-import os
 
-
-os.environ['CUDA_VISIBLE_DEVICES'] = "-1"
 
 NUM_STEPS = 2048                    # Number of timesteps data to collect before updating
 BATCH_SIZE = 64                     # Batch size of training data
@@ -20,48 +18,45 @@ GAE_LAM = 0.95                      # Lambda value for generalized advantage est
 NUM_EPOCHS = 10                     # Number of epochs to train
 
 
-def get_pi_network(obs_dim, action_dim, lower_bound, upper_bound):
-    """
-    Function to create actor network.
-    """
-    input = keras.layers.Input(shape=(obs_dim))
-    output = keras.layers.Dense(
-        64,
-        activation="tanh",
-        kernel_initializer=keras.initializers.orthogonal(gain=np.sqrt(2)))(input)
-    output = keras.layers.Dense(
-        64,
-        activation="tanh",
-        kernel_initializer=keras.initializers.orthogonal(gain=np.sqrt(2)))(output)
 
-    action_out = keras.layers.Dense(
-        action_dim,
-        kernel_initializer=keras.initializers.orthogonal(gain=0.01))(output)
-    action_out = (action_out + 1)*(upper_bound - lower_bound)/2+lower_bound
+class PI_Network(nn.Module):
+    def __init__(self, obs_dim, action_dim, lower_bound, upper_bound) -> None:
+        super().__init__()
+        (
+            self.lower_bound,
+            self.upper_bound
+        ) = (
+            torch.tensor(lower_bound, dtype=torch.float32),
+            torch.tensor(upper_bound, dtype=torch.float32)
+        )
+        self.fc1 = nn.Linear(obs_dim, 64)
+        self.fc2 = nn.Linear(64, 64)
+        self.fc3 = nn.Linear(64, action_dim)
 
-    model = keras.Model(inputs=input, outputs=action_out)
-    return model
+    def forward(self, obs):
+        y = F.tanh(self.fc1(obs))
+        y = F.tanh(self.fc2(y))
+        action = self.fc3(y)
 
+        action = (action + 1)*(self.upper_bound - self.lower_bound)/2+self.lower_bound
 
-def get_v_network(obs_dim):
-    """
-    Function to create value network.
-    """
-    state_input = keras.layers.Input(shape=(obs_dim))
-    state_out = keras.layers.Dense(
-        64,
-        activation="tanh",
-        kernel_initializer=keras.initializers.orthogonal(gain=np.sqrt(2)))(state_input)
-    q_out = keras.layers.Dense(
-        64,
-        activation="tanh",
-        kernel_initializer=keras.initializers.orthogonal(gain=np.sqrt(2)))(state_out)
-    q_out = keras.layers.Dense(
-        1,
-        kernel_initializer=keras.initializers.orthogonal(gain=1.0))(q_out)
+        return action
 
-    model = keras.Model(inputs=state_input, outputs=q_out)
-    return model
+class V_Network(nn.Module):
+    def __init__(self, obs_dim) -> None:
+        super().__init__()
+
+        self.fc1 = nn.Linear(obs_dim, 64)
+        self.fc2 = nn.Linear(64, 64)
+        self.fc3 = nn.Linear(64, 1)
+
+    def forward(self, obs):
+        y = F.tanh(self.fc1(obs))
+        y = F.tanh(self.fc2(y))
+        values = self.fc3(y)
+
+        return values
+        
 
 
 if __name__ == "__main__":
@@ -73,21 +68,22 @@ if __name__ == "__main__":
     
     train_test = "train" if len(sys.argv)==1 else sys.argv[1]
     if train_test=="train":
-        pi_network = get_pi_network(obs_dim, action_dim, lower_bound, upper_bound)
-        v_network = get_v_network(obs_dim)
+        pi_network = PI_Network(obs_dim, action_dim, lower_bound, upper_bound)
+        v_network = V_Network(obs_dim)
 
-        optimizer = keras.optimizers.Adam(learning_rate=3e-4)
+        learning_rate = 3e-4
 
         buffer = PPOBuffer(obs_dim, action_dim, NUM_STEPS)
         policy = PPOPolicy(
             pi_network,
             v_network,
-            optimizer,
+            learning_rate,
             clip_range=0.2,
             value_coeff=0.5,
             obs_dim=obs_dim,
             action_dim=action_dim,
-            initial_std=1.0
+            initial_std=1.0,
+            max_grad_norm=0.5,
         )
 
         ep_reward = 0.0
@@ -114,8 +110,7 @@ if __name__ == "__main__":
                 if done:
                     ep_count += 1
                 # Value of last time-step
-                last_value = tf.squeeze(
-                    policy.v_network(tf.expand_dims(obs, 0), training=False))
+                last_value = policy.get_values(obs)
 
                 # Compute returns and advantage and store in buffer
                 buffer.process_trajectory(
@@ -154,6 +149,20 @@ if __name__ == "__main__":
                             np.squeeze(np.mean(advantage_batch, axis=0))
                         ) / (np.squeeze(np.std(advantage_batch, axis=0)) + 1e-8)
 
+                        (
+                            obs_batch,
+                            action_batch,
+                            log_prob_batch,
+                            advantage_batch,
+                            return_batch,
+                        ) = (
+                            torch.tensor(obs_batch, dtype=torch.float32),
+                            torch.tensor(action_batch, dtype=torch.float32),
+                            torch.tensor(log_prob_batch, dtype=torch.float32),
+                            torch.tensor(advantage_batch, dtype=torch.float32),
+                            torch.tensor(return_batch, dtype=torch.float32),
+                        )
+
                         # Update the networks on minibatch of data
                         (
                             pi_loss,
@@ -180,8 +189,8 @@ if __name__ == "__main__":
                 pi_losses, v_losses, total_losses, approx_kls, stds = [], [], [], [], []
 
         # Save policy and value network
-        pi_network.save('saved_network/pi_network.h5')
-        v_network.save('saved_network/v_network.h5')
+        torch.save(pi_network.state_dict(), 'saved_network/pi_network.pth')
+        torch.save(v_network.state_dict(), 'saved_network/v_network.pth')
 
         # Plot episodic reward
         _, ax = plt.subplots(1, 1, figsize=(5, 4), constrained_layout=True)
@@ -209,12 +218,13 @@ if __name__ == "__main__":
         
         # Evaluate trained network
         # Load saved policy network
-        pi_network = keras.models.load_model('saved_network/pi_network.h5')
+        pi_network = PI_Network(obs_dim, action_dim, lower_bound, upper_bound)
+        pi_network.load_state_dict(torch.load('saved_network/pi_network.pth'))
         obs = env.reset()
         frames = []
         for _ in range(300):
-            obs_tf = tf.expand_dims(tf.cast(obs, dtype=tf.float32), 0)
-            action = pi_network(obs_tf, training=False)
+            obs_torch = torch.unsqueeze(torch.tensor(obs, dtype=torch.float32), 0)
+            action = pi_network(obs_torch).detach().numpy()
             clipped_action = np.clip(action[0], lower_bound, upper_bound)
 
             frames.append(env.render(mode="rgb_array"))
