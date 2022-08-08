@@ -1,4 +1,3 @@
-from turtle import forward
 import torch
 from torch import nn
 from torch.distributions import Normal
@@ -27,12 +26,16 @@ class PPOPolicy(nn.Module):
             action_dim,
             max_grad_norm
         )
+
+        # Gaussian policy will be used. So, log standard deviation is created as trainable variables
         self.log_std =  nn.Parameter(torch.ones(self.action_dim) * torch.log(torch.tensor(initial_std)), requires_grad=True)
 
         self.optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
 
     def forward(self, obs):
         pi_out = self.pi_network(obs)
+
+        # Add Normal distribution layer at the output of pi_network
         dist_out = Normal(pi_out, torch.exp(self.log_std))
 
         v_out = self.v_network(obs)
@@ -51,6 +54,9 @@ class PPOPolicy(nn.Module):
         return action[0].detach().numpy(), torch.squeeze(log_prob).detach().numpy(), torch.squeeze(values).detach().numpy()
 
     def get_values(self, obs):
+        """
+        Function  to return value of the state
+        """
         obs_torch = torch.unsqueeze(torch.tensor(obs, dtype=torch.float32), 0)
 
         _, values = self.forward(obs_torch)
@@ -96,4 +102,10 @@ class PPOPolicy(nn.Module):
         torch.nn.utils.clip_grad_norm_(self.parameters(), self.max_grad_norm)
         self.optimizer.step()
 
-        return pi_loss.detach(), value_loss.detach(), total_loss.detach(), (torch.mean((ratio - 1) - torch.log(ratio))).detach(), torch.exp(self.log_std).detach()
+        return (
+            pi_loss.detach(), 
+            value_loss.detach(), 
+            total_loss.detach(), 
+            (torch.mean((ratio - 1) - torch.log(ratio))).detach(), 
+            torch.exp(self.log_std).detach()
+        )

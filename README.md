@@ -1,6 +1,11 @@
 # Pendulum_PPO
 Implementation of Proximal Policy Optimization (PPO) for continuous action space (`Pendulum-v1` from gym) using tensorflow2.x (keras) and pytorch.
 
+the implementation provided here is from the original paper ([here](https://arxiv.org/abs/1707.06347)). The algorithm is shown below.
+![PPO algorithm](PPO_Algorithm.png)
+
+Some of the minor implementations mentioned [here](https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/) have also been implemented (e.g., advantage normalization, gradient clipping, etc).
+
 To train the model, go to the folder for specific framework (tensorflow2 or pytorch) and run following command on terminal
 ```bash
 python Pendulum_PPO.py train
@@ -39,4 +44,4 @@ This gives gif file named `pendulum_run.gif` in the folder `saved_images`.
 </table>
 
 
-Note: Above plots and animations are not meant to compare tensorflow and pytorch version since they varies on each run.
+Note: Above plots and animations are not meant to compare tensorflow and pytorch version since they varies on different run.

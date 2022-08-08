@@ -149,6 +149,7 @@ if __name__ == "__main__":
                             np.squeeze(np.mean(advantage_batch, axis=0))
                         ) / (np.squeeze(np.std(advantage_batch, axis=0)) + 1e-8)
 
+                        # Convert to torch tensor
                         (
                             obs_batch,
                             action_batch,
