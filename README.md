@@ -14,7 +14,7 @@ This command trains the model. Neural networks (for policy and value) and hyper-
 
   </tr>
   <tr>
-    <td><img src="tensorflow2/season_reward.png"></td>
+    <td><img src="tensorflow2/saved_images/season_reward.png"></td>
     <!-- <td><img src="pytorch/season_reward.png"></td> -->
   </tr>
 </table>
@@ -24,4 +24,16 @@ After the model is trained, run following line at the terminal to evaluate the t
 ```bash
 python Pendulum_PPO.py test
 ```
+This gives gif file named `pendulum_run.gif`.
 
+<table>
+  <tr>
+    <td>From tensorflow (keras)</td>
+    <td>From pytorch</td>
+
+  </tr>
+  <tr>
+    <td><img src="tensorflow2/saved_images/pendulum_run.gif"></td>
+    <!-- <td><img src="pytorch/season_reward.png"></td> -->
+  </tr>
+</table>

@@ -6,6 +6,7 @@ import gym
 from Policy import PPOPolicy
 from PPOBuffer import PPOBuffer
 import matplotlib.pyplot as plt
+from matplotlib import animation
 
 
 NUM_STEPS = 2048                    # Number of timesteps data to collect before updating
@@ -185,21 +186,38 @@ if __name__ == "__main__":
         ax.set_xlabel("season")
         ax.set_ylabel("episodic reward")
         ax.grid(True)
-        plt.savefig("season_reward.png")
+        plt.savefig("saved_images/season_reward.png")
 
-    elif train_test=="eval" or train_test=="test": 
+    elif train_test=="eval" or train_test=="test":
+        # Function to create gif animation. Taken from: https://gist.github.com/botforge/64cbb71780e6208172bbf03cd9293553 
+        def save_frames_as_gif(frames, filename):
+
+            #Mess with this to change frame size
+            plt.figure(figsize=(frames[0].shape[1]/100, frames[0].shape[0]/100), dpi=300)
+
+            patch = plt.imshow(frames[0])
+            plt.axis('off')
+
+            def animate(i):
+                patch.set_data(frames[i])
+
+            anim = animation.FuncAnimation(plt.gcf(), animate, frames = len(frames), interval=50)
+            anim.save(filename, writer='imagemagick', fps=120)
+        
         # Evaluate trained network
         # Load saved policy network
         pi_network = keras.models.load_model('saved_network/pi_network.h5')
         obs = env.reset()
-        for _ in range(500):
+        frames = []
+        for _ in range(200):
             obs_tf = tf.expand_dims(tf.cast(obs, dtype=tf.float32), 0)
             action = pi_network(obs_tf, training=False)
             clipped_action = np.clip(action[0], lower_bound, upper_bound)
 
-            env.render(mode="human")
+            frames.append(env.render(mode="rgb_array"))
             obs, reward, done, _ = env.step(clipped_action)
         env.close()
+        save_frames_as_gif(frames, filename="saved_images/pendulum_run.gif")
 
     else:
         print("Please specify whether to train or evaluate!!!")
