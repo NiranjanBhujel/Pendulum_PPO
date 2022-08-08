@@ -73,6 +73,12 @@ if __name__ == "__main__":
     
     train_test = "train" if len(sys.argv)==1 else sys.argv[1]
     if train_test=="train":
+        # Setup tensorboard summary writer
+        if "Log" not in os.listdir("./"):
+            os.mkdir("Log")
+        summary_writer = tf.summary.create_file_writer("Log")
+
+        # Create networks
         pi_network = get_pi_network(obs_dim, action_dim, lower_bound, upper_bound)
         v_network = get_v_network(obs_dim)
 
@@ -174,11 +180,21 @@ if __name__ == "__main__":
                 mean_ep_reward = ep_reward / ep_count
                 ep_reward, ep_count = 0.0, 0
 
+                with summary_writer.as_default():
+                    tf.summary.scalar("misc/ep_reward_mean", np.mean(mean_ep_reward), t)
+                    tf.summary.scalar("train/pi_loss", np.mean(pi_losses), t)
+                    tf.summary.scalar("train/v_loss", np.mean(v_losses), t)
+                    tf.summary.scalar("train/total_loss", np.mean(total_losses), t)
+                    tf.summary.scalar("train/approx_kl", np.mean(approx_kls), t)
+                    tf.summary.scalar("train/std", np.mean(stds), t)
+
                 print(f"Season={season_count} --> mean_ep_reward={mean_ep_reward}, pi_loss={np.mean(pi_losses)}, v_loss={np.mean(v_losses)}, total_loss={np.mean(total_losses)}, approx_kl={np.mean(approx_kls)}, avg_std={np.mean(stds)}")
 
                 mean_rewards.append(mean_ep_reward)
                 pi_losses, v_losses, total_losses, approx_kls, stds = [], [], [], [], []
 
+        # Close summarywriter
+        summary_writer.close()
         # Save policy and value network
         pi_network.save('saved_network/pi_network.h5')
         v_network.save('saved_network/v_network.h5')

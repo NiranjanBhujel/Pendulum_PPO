@@ -1,13 +1,16 @@
+from asyncore import write
+import os
 import sys
 import torch
 from torch import nn
 import torch.nn.functional as F
+from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 import gym
-from Policy import PPOPolicy
-from PPOBuffer import PPOBuffer
 import matplotlib.pyplot as plt
 from matplotlib import animation
+from Policy import PPOPolicy
+from PPOBuffer import PPOBuffer
 
 
 NUM_STEPS = 2048                    # Number of timesteps data to collect before updating
@@ -68,6 +71,12 @@ if __name__ == "__main__":
     
     train_test = "train" if len(sys.argv)==1 else sys.argv[1]
     if train_test=="train":
+        # Setup tensorboard summary writer
+        if "Log" not in os.listdir("./"):
+            os.mkdir("Log")
+        summary_writer = SummaryWriter("Log")
+
+        # Create networks
         pi_network = PI_Network(obs_dim, action_dim, lower_bound, upper_bound)
         v_network = V_Network(obs_dim)
 
@@ -184,11 +193,19 @@ if __name__ == "__main__":
                 mean_ep_reward = ep_reward / ep_count
                 ep_reward, ep_count = 0.0, 0
 
+                summary_writer.add_scalar("misc/ep_reward_mean", np.mean(mean_ep_reward), t)
+                summary_writer.add_scalar("train/pi_loss", np.mean(pi_losses), t)
+                summary_writer.add_scalar("train/v_loss", np.mean(v_losses), t)
+                summary_writer.add_scalar("train/total_loss", np.mean(total_losses), t)
+                summary_writer.add_scalar("train/approx_kl", np.mean(approx_kls), t)
+                summary_writer.add_scalar("train/std", np.mean(stds), t)
                 print(f"Season={season_count} --> mean_ep_reward={mean_ep_reward}, pi_loss={np.mean(pi_losses)}, v_loss={np.mean(v_losses)}, total_loss={np.mean(total_losses)}, approx_kl={np.mean(approx_kls)}, avg_std={np.mean(stds)}")
 
                 mean_rewards.append(mean_ep_reward)
                 pi_losses, v_losses, total_losses, approx_kls, stds = [], [], [], [], []
 
+        # Close summarywriter
+        summary_writer.close()
         # Save policy and value network
         torch.save(pi_network.state_dict(), 'saved_network/pi_network.pth')
         torch.save(v_network.state_dict(), 'saved_network/v_network.pth')
